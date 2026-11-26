@@ -14,6 +14,7 @@
   "dependencies": {
     "@anthropic-ai/sdk": "1.8.0",
     "@modelcontextprotocol/sdk": "1.32.2",
+    "lucide-react": "1.72.0",
     "openai": "7.55.0",
     "react": "19.3.1",
     "react-dom": "19.3.1",

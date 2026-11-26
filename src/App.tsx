@@ -6,6 +6,8 @@ import {PROVIDERS} from './providers/index.ts';
 import {BASE_SYSTEM_PROMPT} from './providers/types.ts';
 import {credentialsFor, useSettings, type Settings} from './settings.ts';
 import {clearConversation, loadConversation, saveConversation, type ChatMessage, type Conversation} from './store.ts';
+import {ExternalLink, Eye, Mic, MicOff, SendHorizontal, Settings as SettingsIcon, Square, SquarePen, Volume2, VolumeX, X} from 'lucide-react';
+import {IconButton} from './ui/IconButton.tsx';
 import {SettingsDialog} from './ui/SettingsDialog.tsx';
 import {listen, listenSupported, type Listening} from './voice/listen.ts';
 import {createSpeaker, speechSupported, stopSpeaking} from './voice/speak.ts';
@@ -183,24 +185,22 @@ export default function App() {
     <div className={`app${showPanel ? ' with-panel' : ''}`}>
       <div className="chat">
         <header>
-          <h1>guru</h1>
-          <span className="model">{provider.label} · {conversation.model}</span>
-          <span className="spacer" />
+          <h1 className="logo"><img src={`${import.meta.env.BASE_URL}guru.svg`} alt="guru" width="36" height="36" /></h1>
+          <span className="model" title={`${provider.label} · ${conversation.model}`}>{provider.label} · {conversation.model}</span>
           {speechSupported && (
-            <button
+            <IconButton
+              icon={settings.speakReplies ? Volume2 : VolumeX}
+              label={settings.speakReplies ? 'Voice on: replies are read aloud' : 'Voice off: replies are not read aloud'}
               className={settings.speakReplies ? 'on' : ''}
               aria-pressed={settings.speakReplies}
-              title="Read every reply aloud"
               onClick={() => {
                 if (settings.speakReplies) stopSpeaking();
                 saveSettings({...settings, speakReplies: !settings.speakReplies});
               }}
-            >
-              {settings.speakReplies ? 'Voice on' : 'Voice off'}
-            </button>
+            />
           )}
-          <button onClick={() => newChat()} disabled={!conversation.messages.length && !busy}>New chat</button>
-          <button onClick={() => setShowSettings(true)}>Settings</button>
+          <IconButton icon={SquarePen} label="New chat" onClick={() => newChat()} disabled={!conversation.messages.length && !busy} />
+          <IconButton icon={SettingsIcon} label="Settings" onClick={() => setShowSettings(true)} />
         </header>
 
         <main className="messages">
@@ -216,7 +216,13 @@ export default function App() {
               {m.tools && <ToolTrace tools={m.tools} />}
               {m.role === 'assistant' ? <Markdown>{m.text}</Markdown> : m.text}
               {m.view && m.view !== view && (
-                <button className="link" onClick={() => { setSelectedView(m.view); setPanelClosed(undefined); }}>Show this view</button>
+                <IconButton
+                  icon={Eye}
+                  label="Show this view"
+                  showLabel
+                  className="subtle"
+                  onClick={() => { setSelectedView(m.view); setPanelClosed(undefined); }}
+                />
               )}
             </div>
           ))}
@@ -233,16 +239,14 @@ export default function App() {
 
         <form className="composer" onSubmit={e => { e.preventDefault(); send(draft); }}>
           {listenSupported && (
-            <button
-              type="button"
+            <IconButton
+              icon={listening ? MicOff : Mic}
+              label={listening ? 'Stop listening' : 'Speak your message'}
               className={listening ? 'mic on' : 'mic'}
               aria-pressed={!!listening}
               disabled={busy}
               onClick={toggleMic}
-              title={listening ? 'Stop listening' : 'Speak your message'}
-            >
-              {listening ? 'Listening…' : 'Mic'}
-            </button>
+            />
           )}
           <textarea
             value={draft}
@@ -258,8 +262,8 @@ export default function App() {
             }}
           />
           {busy
-            ? <button type="button" onClick={stopAll}>Stop</button>
-            : <button type="submit" className="primary" disabled={!draft.trim()}>Send</button>}
+            ? <IconButton icon={Square} label="Stop" onClick={stopAll} />
+            : <IconButton icon={SendHorizontal} label="Send" type="submit" className="primary" disabled={!draft.trim()} />}
         </form>
       </div>
 
@@ -268,8 +272,10 @@ export default function App() {
           <div className="panel-bar">
             <span>Atlas</span>
             <span className="spacer" />
-            <a href={view} target="_blank" rel="noreferrer">Open</a>
-            <button onClick={() => setPanelClosed(view)} aria-label="Close panel">Close</button>
+            <a className="icon" href={view} target="_blank" rel="noreferrer" aria-label="Open in a new tab" title="Open in a new tab">
+              <ExternalLink size={18} aria-hidden="true" />
+            </a>
+            <IconButton icon={X} label="Close panel" onClick={() => setPanelClosed(view)} />
           </div>
           <iframe
             key={view}
