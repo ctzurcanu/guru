@@ -6,10 +6,10 @@ import {PROVIDERS} from './providers/index.ts';
 import {BASE_SYSTEM_PROMPT} from './providers/types.ts';
 import {credentialsFor, useSettings, type Settings} from './settings.ts';
 import {clearConversation, loadConversation, saveConversation, type ChatMessage, type Conversation} from './store.ts';
-import {ExternalLink, Eye, Mic, MicOff, SendHorizontal, Settings as SettingsIcon, Square, SquarePen, Volume2, VolumeX, X} from 'lucide-react';
+import {Eraser, ExternalLink, Eye, Mic, MicOff, SendHorizontal, Settings as SettingsIcon, Square, SquarePen, Volume2, VolumeX, X} from 'lucide-react';
 import {IconButton} from './ui/IconButton.tsx';
 import {SettingsDialog} from './ui/SettingsDialog.tsx';
-import {listen, listenContinuously, listenSupported, type Listening} from './voice/listen.ts';
+import {listen, listenContinuously, listenSupported, type ContinuousListening, type Listening} from './voice/listen.ts';
 import {createSpeaker, onSpeakingChange, speechSupported, stopSpeaking} from './voice/speak.ts';
 
 const emptyConversation = (s: Settings): Conversation =>
@@ -74,9 +74,10 @@ export default function App() {
   draftRef.current = draft;
   const sendRef = useRef<(text: string, spoken?: boolean) => void>(() => {});
 
+  const handsFreeListener = useRef<ContinuousListening | null>(null);
   useEffect(() => {
     if (!handsFreeListening) return;
-    const listener = listenContinuously({
+    const listener = (handsFreeListener.current = listenContinuously({
       sendWord: settings.sendWord,
       initialText: draftRef.current,
       onText: setDraft,
@@ -85,9 +86,17 @@ export default function App() {
         setHandsFreePaused(true);
         setError(message);
       },
-    });
-    return () => listener.stop();
+    }));
+    return () => {
+      listener.stop();
+      handsFreeListener.current = null;
+    };
   }, [handsFreeListening, settings.sendWord]);
+
+  const clearDraft = () => {
+    setDraft('');
+    handsFreeListener.current?.clear();
+  };
 
   const stopAll = () => {
     abort.current?.abort();
@@ -309,6 +318,7 @@ export default function App() {
               }
             }}
           />
+          {draft && <IconButton icon={Eraser} label="Clear message" onClick={clearDraft} />}
           {busy
             ? <IconButton icon={Square} label="Stop" onClick={stopAll} />
             : <IconButton icon={SendHorizontal} label="Send" type="submit" className="primary" disabled={!draft.trim()} />}

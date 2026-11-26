@@ -86,6 +86,8 @@ export function listen({onText, onDone, onError}: {
 
 export interface ContinuousListening {
   stop(): void;
+  /** Forget everything heard so far, including a phrase still being spoken. */
+  clear(): void;
 }
 
 const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
@@ -165,6 +167,20 @@ export function listenContinuously({sendWord, initialText = '', onText, onSend, 
     stop() {
       stopped = true;
       current?.abort();
+    },
+    clear() {
+      pending = '';
+      onText('');
+      // The session still holds the unfinished phrase; replace it with a fresh one.
+      const old = current;
+      if (!old || stopped) return;
+      old.onresult = null;
+      old.onerror = null;
+      old.onend = () => {
+        current = null;
+        start();
+      };
+      old.abort();
     },
   };
 }
