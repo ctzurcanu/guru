@@ -1,11 +1,17 @@
 import {PROXY_URL, type ProviderId} from '../config.ts';
+import type {ToolResult, Toolbox} from '../mcp/registry.ts';
 
 /** Provider-native conversation history, serialisable as JSON. */
 export type NativeHistory = unknown[];
 
 export interface SendOptions {
-  onText: (delta: string) => void;
+  system: string;
   signal: AbortSignal;
+  onText: (delta: string) => void;
+  /** Tools the model may call; the session runs the call → result → continue loop itself. */
+  toolbox?: Toolbox;
+  onToolCall?: (name: string) => void;
+  onToolResult?: (result: ToolResult) => void;
 }
 
 /**
@@ -14,7 +20,7 @@ export interface SendOptions {
  * thinking blocks or OpenAI's reasoning items, which must be sent back as-is).
  */
 export interface ChatSession {
-  /** Sends a user message and resolves with the full reply. History is only updated on success. */
+  /** Sends a user message, runs any tool calls, and resolves with the reply text. History is only updated on success. */
   send(text: string, options: SendOptions): Promise<string>;
   readonly history: NativeHistory;
 }
@@ -32,6 +38,9 @@ export interface Provider {
   describeError(error: unknown): string;
 }
 
+export const BASE_SYSTEM_PROMPT =
+  'You are guru, a helpful assistant. Answers may be read aloud, so keep them clear and concise.';
+
 /** SDK client options that route requests through guru-proxy. */
 export function proxyOptions(credentials: Credentials, path: string) {
   return 'passphrase' in credentials
@@ -46,5 +55,24 @@ export function proxyMessage(body: unknown): string | undefined {
   return error?.type === 'proxy_error' ? error.message : undefined;
 }
 
-export const SYSTEM_PROMPT =
-  'You are guru, a helpful assistant. Answers may be read aloud, so keep them clear and concise.';
+/** Joins text from successive model steps with a paragraph break, also when streaming. */
+export function textJoiner(onText: (delta: string) => void) {
+  let text = '';
+  let fresh = false;
+  return {
+    step() {
+      fresh = text.length > 0;
+    },
+    add(delta: string) {
+      if (fresh && delta) {
+        delta = '\n\n' + delta;
+        fresh = false;
+      }
+      text += delta;
+      onText(delta);
+    },
+    get text() {
+      return text;
+    },
+  };
+}

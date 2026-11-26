@@ -38,7 +38,7 @@ const UPSTREAMS: Record<string, Upstream> = {
 
 /** The caller's own key; SDKs send it as `x-api-key` or `Authorization: Bearer`. */
 const callerKey = (request: Request) =>
-  request.headers.get('x-api-key') ?? request.headers.get('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1];
+  (request.headers.get('x-api-key') ?? request.headers.get('authorization')?.match(/^Bearer\s+(.+)$/i)?.[1])?.trim();
 
 // Only these request headers are forwarded upstream.
 const FORWARDED = ['content-type', 'accept', 'anthropic-version', 'anthropic-beta', 'openai-beta'];
@@ -91,12 +91,14 @@ export default {
       if (value) headers.set(h, value);
     }
 
-    const pass = request.headers.get('x-guru-pass');
+    // Trim everything: pasted secrets often carry a stray space or newline.
+    const pass = request.headers.get('x-guru-pass')?.trim();
     if (pass) {
-      if (!env.GURU_PASSPHRASE || !(await same(pass, env.GURU_PASSPHRASE))) {
+      const expected = env.GURU_PASSPHRASE?.trim();
+      if (!expected || !(await same(pass, expected))) {
         return error(401, 'Wrong guru passphrase.', corsHeaders);
       }
-      const key = upstream.ownerKey(env);
+      const key = upstream.ownerKey(env)?.trim();
       if (!key) return error(503, `No ${name} key is configured on the proxy.`, corsHeaders);
       upstream.setKey(headers, key);
     } else {

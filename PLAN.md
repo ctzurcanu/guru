@@ -80,20 +80,23 @@ Found during the Phase 2 browser test: OpenAI's `/v1/responses` sent no CORS hea
 - [ ] Later: rate limiting per IP
 
 ### Phase 3: MCP and atlas
-- [ ] MCP registry: connect, `tools/list`, convert schemas for Anthropic and OpenAI
-- [ ] Agent loop with tool calls (with a cap on iterations and a visible tool-call trace)
-- [ ] Pre-registered atlas server; side panel showing the `show_anatomy` viewer URL in an iframe
-- [ ] Settings: add/remove/toggle MCP server URLs, with a clear CORS error message
-- [ ] Verify: "show me the heart" → `show_anatomy` → the viewer renders in the panel, with both providers
+- [x] MCP registry (`src/mcp/registry.ts`): connect, `tools/list`, tools exposed as `<server>__<tool>`; unreachable servers are reported as a notice, not fatal
+- [x] Tool loop inside each provider session (cap `MAX_TOOL_STEPS` = 8; on the last step tools are disabled so the model must answer); tool chips shown on the reply
+- [x] Pre-registered atlas server with prompt instructions (search with short terms, then show by id); side panel with the viewer (beside the chat on wide screens, above it on phones); views saved with the conversation
+- [x] Settings: toggle built-in plugins
+- [ ] Settings: add/remove custom MCP server URLs, with a clear CORS error message
+- [x] Verify (headless Chrome, scripted Claude stream + **real** atlas MCP): "show me C5 in the atlas" → search_anatomy("C5") → show_anatomy("ZA:Vertebra C5") → the viewer loads with Vertebra C5 selected; survives reload; no overflow at 400px
+- [ ] Verify with real models on the live site (Claude and OpenAI); the OpenAI tool loop is type-checked but not yet run
 
 ### Phase 4: Voice output (TTS)
-- [ ] `speechSynthesis` engine; split streaming text into sentences for low latency
+- [x] `speechSynthesis` engine; split streaming text into sentences for low latency (unit-checked: markdown stripped, code skipped)
+- [x] "Voice on/off" toggle reads every reply; replies to spoken messages are always read aloud; Stop and a new message stop speech
 - [ ] Optional OpenAI TTS engine
 - [ ] Response mode toggle (text / voice / both); stop/interrupt button
 - [ ] Verify: answers are spoken in Chrome and Safari; interrupting stops playback
 
 ### Phase 5: Voice input (ASR)
-- [ ] Push-to-talk with the Web Speech API
+- [x] Mic button with the Web Speech API: live transcript in the input, sends when you pause (hidden where unsupported, e.g. Firefox)
 - [ ] Optional hands-free mode: vad-web + OpenAI transcription; barge-in stops TTS
 - [ ] Verify: a full voice round trip in Chrome, Safari and Firefox (OpenAI path, because Firefox has no Web Speech recognition)
 

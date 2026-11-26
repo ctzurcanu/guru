@@ -1,5 +1,5 @@
 import {useEffect, useRef, useState} from 'react';
-import {DEFAULT_MODELS, type ProviderId} from '../config.ts';
+import {BUILTIN_MCP_SERVERS, DEFAULT_MODELS, type ProviderId} from '../config.ts';
 import {PROVIDERS} from '../providers/index.ts';
 import {credentialsFor, type AuthMode, type Settings} from '../settings.ts';
 
@@ -88,7 +88,7 @@ export function SettingsDialog({settings, onSave, onClearAll, onClose}: Props) {
               type="password"
               autoComplete="current-password"
               value={draft.passphrase}
-              onChange={e => set('passphrase', e.target.value)}
+              onChange={e => set('passphrase', e.target.value.trim())}
             />
           </label>
         ) : (
@@ -112,6 +112,20 @@ export function SettingsDialog({settings, onSave, onClearAll, onClose}: Props) {
           </select>
         </label>
         {modelError && <p className="error">{modelError}</p>}
+
+        <fieldset className="auth">
+          <legend>Plugins</legend>
+          {BUILTIN_MCP_SERVERS.map(server => (
+            <label key={server.id} className="radio">
+              <input
+                type="checkbox"
+                checked={draft.plugins[server.id] ?? true}
+                onChange={e => set('plugins', {...draft.plugins, [server.id]: e.target.checked})}
+              />
+              {server.name}
+            </label>
+          ))}
+        </fieldset>
 
         <p className="hint">
           {auth === 'guru'

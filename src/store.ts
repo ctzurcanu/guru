@@ -4,6 +4,10 @@ import type {NativeHistory} from './providers/types.ts';
 export interface ChatMessage {
   role: 'user' | 'assistant';
   text: string;
+  /** Tools the assistant used for this reply, e.g. "Atlas: show_anatomy". */
+  tools?: string[];
+  /** Interactive view produced by a plugin (atlas viewer URL), shown in the side panel. */
+  view?: string;
 }
 
 /** The current conversation: what's shown, plus the provider-native history sent to the API. */

@@ -52,12 +52,55 @@ button.link { padding: 0; border: 0; background: none; color: var(--accent); tex
 
 .app {
   display: flex;
-  flex-direction: column;
   height: 100dvh;
+}
+
+.chat {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
   max-width: 48rem;
   margin: 0 auto;
   padding: 0 1rem;
 }
+.app.with-panel .chat { flex: 0 1 34rem; margin: 0; }
+
+.panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  border-left: 1px solid var(--border);
+}
+.panel-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--border);
+  font-size: 0.9rem;
+}
+.panel-bar a { color: var(--accent); }
+.panel iframe { flex: 1; width: 100%; border: 0; background: #000; }
+
+@media (max-width: 900px) {
+  .app.with-panel { flex-direction: column-reverse; }
+  .app.with-panel .chat { flex: 1; min-height: 0; max-width: none; }
+  .panel { flex: 0 0 45dvh; border-left: 0; border-bottom: 1px solid var(--border); }
+}
+
+.tools { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.4rem; }
+.tool {
+  padding: 0.1rem 0.5rem;
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 0.8rem;
+}
+.notice { color: var(--muted); font-size: 0.85rem; }
+button.on { border-color: var(--accent); color: var(--accent); }
+button.mic.on { background: var(--accent); color: var(--accent-text); }
 
 header {
   display: flex;

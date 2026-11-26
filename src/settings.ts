@@ -1,5 +1,5 @@
 import {useCallback, useState} from 'react';
-import {DEFAULT_MODELS, type ProviderId} from './config.ts';
+import {BUILTIN_MCP_SERVERS, DEFAULT_MODELS, type ProviderId} from './config.ts';
 import type {Credentials} from './providers/types.ts';
 
 /** 'guru': the proxy uses the owner's key after the passphrase. 'own': the user's own API key. */
@@ -11,6 +11,10 @@ export interface Settings {
   passphrase: string;
   keys: Record<ProviderId, string>;
   models: Record<ProviderId, string>;
+  /** Enabled state of each built-in MCP server, by id. */
+  plugins: Record<string, boolean>;
+  /** Read every reply aloud (replies to spoken messages are always read aloud). */
+  speakReplies: boolean;
 }
 
 /** Credentials for a provider, or undefined when none have been entered yet. */
@@ -27,6 +31,8 @@ const DEFAULTS: Settings = {
   passphrase: '',
   keys: {anthropic: '', openai: ''},
   models: {...DEFAULT_MODELS},
+  plugins: Object.fromEntries(BUILTIN_MCP_SERVERS.map(s => [s.id, true])),
+  speakReplies: false,
 };
 
 function load(): Settings {
@@ -38,6 +44,8 @@ function load(): Settings {
       passphrase: saved.passphrase ?? '',
       keys: {...DEFAULTS.keys, ...saved.keys},
       models: {...DEFAULTS.models, ...saved.models},
+      plugins: {...DEFAULTS.plugins, ...saved.plugins},
+      speakReplies: saved.speakReplies ?? DEFAULTS.speakReplies,
     };
   } catch {
     return DEFAULTS;

@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
-import {SYSTEM_PROMPT, proxyMessage, proxyOptions, type ChatSession, type Credentials, type Provider} from './types.ts';
+import {MAX_TOOL_STEPS} from '../config.ts';
+import {proxyMessage, proxyOptions, textJoiner, type ChatSession, type Credentials, type Provider} from './types.ts';
 
 type InputItem = OpenAI.Responses.ResponseInputItem;
 
@@ -10,6 +11,14 @@ const NON_CHAT = /(audio|realtime|transcribe|tts|image|search|embedding|moderati
 function client(credentials: Credentials) {
   // Requests go through guru-proxy; no owner key is ever in the browser.
   return new OpenAI({...proxyOptions(credentials, '/openai/v1'), dangerouslyAllowBrowser: true});
+}
+
+function parseArgs(raw: string): {args?: unknown; error?: string} {
+  try {
+    return {args: raw ? JSON.parse(raw) : {}};
+  } catch {
+    return {error: 'Invalid JSON arguments.'};
+  }
 }
 
 export const openaiProvider: Provider = {
@@ -31,26 +40,55 @@ export const openaiProvider: Provider = {
 
     const session: ChatSession = {
       history: items,
-      async send(text, {onText, signal}) {
-        const request: InputItem[] = [...items, {role: 'user', content: text}];
-        const stream = api.responses.stream({
-          model,
-          instructions: SYSTEM_PROMPT,
-          input: request,
-          reasoning: {effort: 'low'}, // conversational turns: low latency matters most
-          // Nothing is stored on OpenAI's side; reasoning is returned encrypted and sent back next turn.
-          store: false,
-          include: ['reasoning.encrypted_content'],
-        }, {signal});
+      async send(text, {system, signal, onText, toolbox, onToolCall, onToolResult}) {
+        // MCP schemas aren't written for OpenAI's strict mode, so it stays off.
+        const tools: OpenAI.Responses.FunctionTool[] | undefined = toolbox?.tools.map(t => ({
+          type: 'function',
+          name: t.name,
+          description: t.description,
+          parameters: t.inputSchema,
+          strict: false,
+        }));
+        const turn: InputItem[] = [{role: 'user', content: text}];
+        const out = textJoiner(onText);
 
-        for await (const event of stream) {
-          if (event.type === 'response.output_text.delta') onText(event.delta);
+        for (let step = 0; ; step++) {
+          out.step();
+          const last = step === MAX_TOOL_STEPS - 1;
+          const stream = api.responses.stream({
+            model,
+            instructions: system,
+            input: [...items, ...turn],
+            reasoning: {effort: 'low'}, // conversational turns: low latency matters most
+            ...(tools?.length && {tools, tool_choice: last ? 'none' : 'auto'}),
+            // Nothing is stored on OpenAI's side; reasoning is returned encrypted and sent back next turn.
+            store: false,
+            include: ['reasoning.encrypted_content'],
+          }, {signal});
+
+          for await (const event of stream) {
+            if (event.type === 'response.output_text.delta') out.add(event.delta);
+          }
+          const response = await stream.finalResponse();
+          if (response.error) throw new Error(response.error.message);
+          turn.push(...(response.output as InputItem[]));
+
+          const calls = response.output.filter(item => item.type === 'function_call');
+          if (!calls.length || !toolbox) break;
+
+          const outputs = await Promise.all(calls.map(async (call): Promise<InputItem> => {
+            onToolCall?.(call.name);
+            const {args, error} = parseArgs(call.arguments);
+            if (error) return {type: 'function_call_output', call_id: call.call_id, output: `Error: ${error}`};
+            const result = await toolbox.call(call.name, args);
+            onToolResult?.(result);
+            return {type: 'function_call_output', call_id: call.call_id, output: result.isError ? `Error: ${result.text}` : result.text};
+          }));
+          turn.push(...outputs);
         }
-        const response = await stream.finalResponse();
-        if (response.error) throw new Error(response.error.message);
 
-        items.push(request.at(-1)!, ...(response.output as InputItem[]));
-        return response.output_text;
+        items.push(...turn);
+        return out.text;
       },
     };
     return session;

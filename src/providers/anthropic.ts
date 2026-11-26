@@ -1,5 +1,6 @@
 import Anthropic from '@anthropic-ai/sdk';
-import {SYSTEM_PROMPT, proxyMessage, proxyOptions, type ChatSession, type Credentials, type Provider} from './types.ts';
+import {MAX_TOOL_STEPS} from '../config.ts';
+import {proxyMessage, proxyOptions, textJoiner, type ChatSession, type Credentials, type Provider} from './types.ts';
 
 type MessageParam = Anthropic.Beta.BetaMessageParam;
 
@@ -29,26 +30,52 @@ export const anthropicProvider: Provider = {
 
     const session: ChatSession = {
       history: messages,
-      async send(text, {onText, signal}) {
-        const request = [...messages, {role: 'user', content: text} satisfies MessageParam];
-        const stream = api.beta.messages.stream({
-          model,
-          max_tokens: 64000,
-          system: SYSTEM_PROMPT,
-          messages: request,
-          output_config: {effort: 'low'}, // conversational turns: low latency matters most
-          ...(FALLBACK_MODELS.has(model) && {betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default'}),
-        }, {signal});
+      async send(text, {system, signal, onText, toolbox, onToolCall, onToolResult}) {
+        const tools = toolbox?.tools.map(t => ({
+          name: t.name,
+          description: t.description,
+          input_schema: t.inputSchema as Anthropic.Beta.BetaTool.InputSchema,
+        }));
+        const turn: MessageParam[] = [{role: 'user', content: text}];
+        const out = textJoiner(onText);
 
-        for await (const event of stream) {
-          if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') onText(event.delta.text);
+        for (let step = 0; ; step++) {
+          out.step();
+          const last = step === MAX_TOOL_STEPS - 1;
+          const stream = api.beta.messages.stream({
+            model,
+            max_tokens: 64000,
+            system,
+            messages: [...messages, ...turn],
+            output_config: {effort: 'low'}, // conversational turns: low latency matters most
+            ...(tools?.length && {tools, tool_choice: {type: last ? 'none' : 'auto'}}),
+            ...(FALLBACK_MODELS.has(model) && {betas: ['server-side-fallback-2026-07-01'], fallbacks: 'default'}),
+          }, {signal});
+
+          for await (const event of stream) {
+            if (event.type === 'content_block_delta' && event.delta.type === 'text_delta') out.add(event.delta.text);
+          }
+          const reply = await stream.finalMessage();
+          if (reply.stop_reason === 'refusal') throw new Error('Claude declined to answer this request.');
+
+          // Keep the full content (thinking blocks included) so later turns send it back unchanged.
+          turn.push({role: 'assistant', content: reply.content});
+
+          const uses = reply.content.filter(block => block.type === 'tool_use');
+          if (reply.stop_reason !== 'tool_use' || !uses.length || !toolbox) break;
+
+          // Run this step's calls together and return all results in one message.
+          const results = await Promise.all(uses.map(async use => {
+            onToolCall?.(use.name);
+            const result = await toolbox.call(use.name, use.input);
+            onToolResult?.(result);
+            return {type: 'tool_result' as const, tool_use_id: use.id, content: result.text, is_error: result.isError};
+          }));
+          turn.push({role: 'user', content: results});
         }
-        const reply = await stream.finalMessage();
-        if (reply.stop_reason === 'refusal') throw new Error('Claude declined to answer this request.');
 
-        // Keep the full content (thinking blocks included) so later turns send it back unchanged.
-        messages.push(request.at(-1)!, {role: 'assistant', content: reply.content});
-        return reply.content.flatMap(block => block.type === 'text' ? [block.text] : []).join('');
+        messages.push(...turn);
+        return out.text;
       },
     };
     return session;
