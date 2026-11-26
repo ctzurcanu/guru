@@ -1,0 +1,10 @@
+{
+  "name": "guru-proxy",
+  "main": "index.ts",
+  "compatibility_date": "2026-04-07",
+  "workers_dev": true,
+  "preview_urls": false,
+  "vars": {"ALLOWED_ORIGINS": "https://ctzurcanu.github.io"}
+  // Secrets (never in this file): GURU_PASSPHRASE, ANTHROPIC_API_KEY, OPENAI_API_KEY
+  // Set with: npx wrangler secret put <NAME> --config worker/wrangler.jsonc
+}

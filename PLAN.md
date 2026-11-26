@@ -4,8 +4,11 @@ A static web app (built with Vite, hosted on GitHub Pages) for chatting with Cla
 
 ## Constraints
 
-- **Static only:** no server code. Everything runs in the browser.
-- **Bring your own API key:** the browser calls Anthropic and OpenAI directly. Keys are stored only in the user's browser.
+- **Static site plus one small proxy:** the app is static files on GitHub Pages. API calls go through a Cloudflare Worker (`guru-proxy`), the only server-side code.
+- **API keys are never in the repo or the built site.** GitHub Secrets used in a Pages build would be copied into the public JavaScript, so they can't be used for this. The owner's keys are stored as Worker secrets.
+- **Two ways to supply a key:**
+  - **guru key:** the user enters a passphrase, and the Worker adds the owner's key server-side.
+  - **Own key:** the user pastes their own key. It's stored in their browser and passed through the Worker unchanged.
 - **Subscription login is out of scope:** Claude Pro/Max and ChatGPT/Codex sign-in can't be used from a static web app. If it's ever needed, see Phase 7.
 - **MCP servers must be remote and allow CORS** for the guru origin. Stdio MCP servers aren't supported.
 - **Atlas is an external, already-deployed service.** guru only uses it as a client and changes nothing in human-atlas.
@@ -22,13 +25,14 @@ A static web app (built with Vite, hosted on GitHub Pages) for chatting with Cla
 | Concern | Choice |
 |---|---|
 | Build | Vite + TypeScript + React (same as human-atlas) |
-| LLM: Claude | `@anthropic-ai/sdk` with `dangerouslyAllowBrowser: true` (sends the `anthropic-dangerous-direct-browser-access` header) |
-| LLM: OpenAI | `openai` SDK with `dangerouslyAllowBrowser: true` (Responses API) |
+| LLM: Claude | `@anthropic-ai/sdk`, `baseURL` = `<proxy>/anthropic` |
+| LLM: OpenAI | `openai` SDK (Responses API), `baseURL` = `<proxy>/openai/v1` |
+| Proxy | Cloudflare Worker `guru-proxy` (`worker/`): path allowlist, CORS for the guru origin, passphrase gate, streams responses through unchanged |
 | MCP | `@modelcontextprotocol/sdk` `Client` + `StreamableHTTPClientTransport` |
 | ASR | Default: Web Speech API. Optional: OpenAI transcription (BYO key) with `@ricky0123/vad-web` voice-activity detection for hands-free turns (the approach saypi uses) |
 | TTS | Default: `speechSynthesis`. Optional: OpenAI TTS (BYO key), streamed sentence by sentence |
-| Storage | `localStorage` for settings and keys; IndexedDB for conversation history |
-| Deploy | GitHub Actions → GitHub Pages, `base: '/guru/'` |
+| Storage | `localStorage` for settings, passphrase and own keys; IndexedDB for conversation history |
+| Deploy | Site: GitHub Actions → GitHub Pages, `base: '/guru/'`. Worker: `wrangler deploy`, keys set with `wrangler secret put` |
 
 ## Architecture
 
@@ -54,14 +58,26 @@ src/
 - [x] Vite + React + TS project, `base: '/guru/'` (ESLint postponed)
 - [x] GitHub Actions Pages workflow (`.github/workflows/deploy.yml`); placeholder page
 - [x] Verify locally: `npm run build` passes; `vite preview` serves `/guru/` and its assets (200)
-- [ ] Enable Pages (Settings → Pages → Source: GitHub Actions). The repo is currently private, so Pages needs a paid GitHub plan or a public repo.
-- [ ] Verify: the live URL loads
+- [x] Enable Pages (Settings → Pages → Source: GitHub Actions)
+- [x] Verify: https://ctzurcanu.github.io/guru/ and its assets load (200); atlas `/mcp` CORS preflight from that origin returns 204
 
 ### Phase 2: Text chat with your own key
-- [ ] Settings dialog: provider (Claude / OpenAI), API key, model
-- [ ] Anthropic and OpenAI streaming adapters behind the common interface
-- [ ] Chat UI with streaming and Markdown rendering; history in IndexedDB
-- [ ] Verify: a streaming conversation works with each provider from the deployed site; an invalid key shows a clear error
+- [x] Settings dialog: provider (Claude / OpenAI), API key, model (live model list)
+- [x] Anthropic and OpenAI streaming adapters behind the common interface (native history per provider)
+- [x] Chat UI with streaming and Markdown rendering; history in IndexedDB; Stop; failed turns roll back
+- [x] Verify (headless Chrome): an invalid key shows a clear error for both providers; settings persist across reload
+- [ ] Verify: a streaming conversation works with each provider from the deployed site (after Phase 2b)
+
+### Phase 2b: Key proxy (Cloudflare Worker)
+Found during the Phase 2 browser test: OpenAI's `/v1/responses` sent no CORS headers to the browser (at least on a 401), so calling OpenAI directly from the browser isn't reliable.
+- [x] `worker/`: routes `/anthropic/*` → `api.anthropic.com` and `/openai/*` → `api.openai.com`; only allowlisted paths (`/v1/messages`, `/v1/models`, `/v1/responses`; audio paths added in Phases 4–5)
+- [x] Authentication: a valid `x-guru-pass` header (constant-time compare against the `GURU_PASSPHRASE` secret) → the Worker uses the `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` secrets. Without it, the client's own key header is forwarded. With neither → 401.
+- [x] Strip browser-only headers before calling upstream; CORS limited to `https://ctzurcanu.github.io` and localhost; responses streamed through unchanged
+- [x] Client: settings get a per-provider choice of guru key (passphrase) or own key; both SDKs point at the proxy
+- [x] Verify locally with `wrangler dev` (curl + headless Chrome, 5/5 cases): wrong passphrase → "Wrong guru passphrase."; passphrase and own key reach Anthropic and OpenAI (401 for fake keys, with CORS); disallowed path → 404; foreign origin gets no CORS header. Streaming with a real key is still untested.
+- Note: Anthropic SDK 1.8 sends the key as `Authorization: Bearer`, so the Worker accepts either header and sends each provider the form it expects.
+- [ ] Deploy: the owner runs `wrangler secret put` for each key and the passphrase, then `wrangler deploy`
+- [ ] Later: rate limiting per IP
 
 ### Phase 3: MCP and atlas
 - [ ] MCP registry: connect, `tools/list`, convert schemas for Anthropic and OpenAI
