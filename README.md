@@ -3,7 +3,7 @@
 ## stack
 
 - https://github.com/Pedal-Intelligence/saypi-userscript
-- [/Users/christiantzurcanu/Documents/dev/human-atlas](https://github.com/ctzurcanu/human-atlas)
+- [https://github.com/ctzurcanu/human-atlas](https://github.com/ctzurcanu/human-atlas)
 - Codex and Claude
 
 ## behaviour

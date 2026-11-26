@@ -51,8 +51,10 @@ src/
 ## Phases
 
 ### Phase 1: Scaffold and deploy
-- [ ] Vite + React + TS project, ESLint, `base: '/guru/'`
-- [ ] GitHub Actions Pages workflow; deploy a placeholder page
+- [x] Vite + React + TS project, `base: '/guru/'` (ESLint postponed)
+- [x] GitHub Actions Pages workflow (`.github/workflows/deploy.yml`); placeholder page
+- [x] Verify locally: `npm run build` passes; `vite preview` serves `/guru/` and its assets (200)
+- [ ] Enable Pages (Settings → Pages → Source: GitHub Actions). The repo is currently private, so Pages needs a paid GitHub plan or a public repo.
 - [ ] Verify: the live URL loads
 
 ### Phase 2: Text chat with your own key
