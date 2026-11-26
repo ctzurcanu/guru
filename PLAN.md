@@ -86,7 +86,8 @@ Found during the Phase 2 browser test: OpenAI's `/v1/responses` sent no CORS hea
 - [x] Settings: toggle built-in plugins
 - [ ] Settings: add/remove custom MCP server URLs, with a clear CORS error message
 - [x] Verify (headless Chrome, scripted Claude stream + **real** atlas MCP): "show me C5 in the atlas" → search_anatomy("C5") → show_anatomy("ZA:Vertebra C5") → the viewer loads with Vertebra C5 selected; survives reload; no overflow at 400px
-- [ ] Verify with real models on the live site (Claude and OpenAI); the OpenAI tool loop is type-checked but not yet run
+- [x] OpenAI tool loop verified with a scripted Responses stream + real atlas (fixed: the SDK's `parsed_arguments`/`parsed` fields were sent back as input → 400)
+- [ ] Verify with real models on the live site (Claude and OpenAI)
 
 ### Phase 4: Voice output (TTS)
 - [x] `speechSynthesis` engine; split streaming text into sentences for low latency (unit-checked: markdown stripped, code skipped)

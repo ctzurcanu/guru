@@ -13,6 +13,21 @@ function client(credentials: Credentials) {
   return new OpenAI({...proxyOptions(credentials, '/openai/v1'), dangerouslyAllowBrowser: true});
 }
 
+/**
+ * The SDK's stream helper adds client-side fields to output items (`parsed_arguments` on
+ * function calls, `parsed` on output text). The API rejects them as input, so drop them.
+ */
+function asInput(item: InputItem): InputItem {
+  const {parsed_arguments: _a, ...rest} = item as InputItem & {parsed_arguments?: unknown};
+  if (rest.type === 'message' && Array.isArray(rest.content)) {
+    return {...rest, content: rest.content.map(part => {
+      const {parsed: _p, ...clean} = part as typeof part & {parsed?: unknown};
+      return clean;
+    })} as InputItem;
+  }
+  return rest as InputItem;
+}
+
 function parseArgs(raw: string): {args?: unknown; error?: string} {
   try {
     return {args: raw ? JSON.parse(raw) : {}};
@@ -58,7 +73,7 @@ export const openaiProvider: Provider = {
           const stream = api.responses.stream({
             model,
             instructions: system,
-            input: [...items, ...turn],
+            input: [...items, ...turn].map(asInput), // also cleans conversations saved before this fix
             reasoning: {effort: 'low'}, // conversational turns: low latency matters most
             ...(tools?.length && {tools, tool_choice: last ? 'none' : 'auto'}),
             // Nothing is stored on OpenAI's side; reasoning is returned encrypted and sent back next turn.
@@ -71,7 +86,7 @@ export const openaiProvider: Provider = {
           }
           const response = await stream.finalResponse();
           if (response.error) throw new Error(response.error.message);
-          turn.push(...(response.output as InputItem[]));
+          turn.push(...(response.output as InputItem[]).map(asInput));
 
           const calls = response.output.filter(item => item.type === 'function_call');
           if (!calls.length || !toolbox) break;
