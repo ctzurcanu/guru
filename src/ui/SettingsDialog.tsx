@@ -308,6 +308,34 @@ function VoiceDetail({state: [draft, setDraft]}: {state: Draft}) {
         <span>Read every reply aloud</span>
       </label>
       <p className="hint">Replies to spoken messages are always read aloud.</p>
+
+      <label className="choice">
+        <input
+          type="checkbox"
+          checked={draft.handsFree}
+          disabled={!listenSupported}
+          onChange={e => setDraft(d => ({...d, handsFree: e.target.checked}))}
+        />
+        <span>Hands-free: keep the microphone on</span>
+      </label>
+      <label className="field indent">
+        Send word
+        <input
+          type="text"
+          value={draft.sendWord}
+          disabled={!draft.handsFree}
+          spellCheck={false}
+          onChange={e => {
+            const sendWord = e.target.value;
+            setDraft(d => ({...d, sendWord}));
+          }}
+          onBlur={() => setDraft(d => ({...d, sendWord: d.sendWord.trim() || 'over'}))}
+        />
+      </label>
+      <p className="hint">
+        Speak normally and end with “{draft.sendWord.trim() || 'over'}” to send. The microphone only listens while
+        this page is visible, and pauses while guru answers or speaks. The mic button pauses and resumes it.
+      </p>
       <p className={listenSupported ? 'status ok' : 'status error'}>
         {listenSupported ? <CircleCheck size={16} aria-hidden="true" /> : <CircleX size={16} aria-hidden="true" />}
         {listenSupported ? 'Microphone input is supported in this browser.' : 'This browser has no speech recognition (use Chrome, Edge or Safari).'}

@@ -98,6 +98,7 @@ Found during the Phase 2 browser test: OpenAI's `/v1/responses` sent no CORS hea
 
 ### Phase 5: Voice input (ASR)
 - [x] Mic button with the Web Speech API: live transcript in the input, sends when you pause (hidden where unsupported, e.g. Firefox)
+- [x] Hands-free mode (Settings → Voice): mic stays on while the page is visible; a phrase ending with the send word (default "over") sends; paused while guru answers or speaks; mic button pauses/resumes; auto-restarts when the browser ends a session. Verified with fake speech APIs (17 checks).
 - [ ] Optional hands-free mode: vad-web + OpenAI transcription; barge-in stops TTS
 - [ ] Verify: a full voice round trip in Chrome, Safari and Firefox (OpenAI path, because Firefox has no Web Speech recognition)
 

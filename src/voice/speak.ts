@@ -16,6 +16,23 @@ function plain(text: string) {
 
 export const speechSupported = typeof window !== 'undefined' && 'speechSynthesis' in window;
 
+// How many utterances are queued or playing; listeners hear when speaking starts and stops.
+let queued = 0;
+const listeners = new Set<(speaking: boolean) => void>();
+const setQueued = (n: number) => {
+  const was = queued > 0;
+  queued = Math.max(0, n);
+  if (was !== queued > 0) listeners.forEach(l => l(queued > 0));
+};
+
+/** Calls `listener` whenever guru starts or stops speaking. Returns an unsubscribe function. */
+export function onSpeakingChange(listener: (speaking: boolean) => void) {
+  listeners.add(listener);
+  return () => {
+    listeners.delete(listener);
+  };
+}
+
 export function createSpeaker() {
   let buffer = '';
   let inCode = false;
@@ -25,6 +42,8 @@ export function createSpeaker() {
     if (!words || !speechSupported) return;
     const utterance = new SpeechSynthesisUtterance(words);
     utterance.lang = navigator.language;
+    utterance.onend = utterance.onerror = () => setQueued(queued - 1);
+    setQueued(queued + 1);
     speechSynthesis.speak(utterance);
   };
 
@@ -60,4 +79,5 @@ export function createSpeaker() {
 
 export function stopSpeaking() {
   if (speechSupported) speechSynthesis.cancel();
+  setQueued(0);
 }

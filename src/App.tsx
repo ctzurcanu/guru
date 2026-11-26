@@ -9,8 +9,8 @@ import {clearConversation, loadConversation, saveConversation, type ChatMessage,
 import {ExternalLink, Eye, Mic, MicOff, SendHorizontal, Settings as SettingsIcon, Square, SquarePen, Volume2, VolumeX, X} from 'lucide-react';
 import {IconButton} from './ui/IconButton.tsx';
 import {SettingsDialog} from './ui/SettingsDialog.tsx';
-import {listen, listenSupported, type Listening} from './voice/listen.ts';
-import {createSpeaker, speechSupported, stopSpeaking} from './voice/speak.ts';
+import {listen, listenContinuously, listenSupported, type Listening} from './voice/listen.ts';
+import {createSpeaker, onSpeakingChange, speechSupported, stopSpeaking} from './voice/speak.ts';
 
 const emptyConversation = (s: Settings): Conversation =>
   ({provider: s.provider, model: s.models[s.provider], messages: [], history: []});
@@ -33,6 +33,9 @@ export default function App() {
   const [listening, setListening] = useState<Listening | null>(null);
   const [panelClosed, setPanelClosed] = useState<string | undefined>();
   const [selectedView, setSelectedView] = useState<string | undefined>();
+  const [handsFreePaused, setHandsFreePaused] = useState(false);
+  const [speaking, setSpeaking] = useState(false);
+  const [visible, setVisible] = useState(() => document.visibilityState === 'visible');
   const abort = useRef<AbortController | null>(null);
   const bottom = useRef<HTMLDivElement>(null);
 
@@ -41,6 +44,9 @@ export default function App() {
   const busy = pending !== null;
   const view = pending?.view ?? selectedView ?? conversation.messages.findLast(m => m.view)?.view;
   const showPanel = !!view && view !== panelClosed;
+  const handsFree = settings.handsFree && listenSupported;
+  // Hands-free listens only while this page is visible, and not while guru answers or speaks.
+  const handsFreeListening = handsFree && !handsFreePaused && visible && !busy && !speaking && !showSettings;
 
   useEffect(() => {
     loadConversation().then(saved => {
@@ -54,6 +60,34 @@ export default function App() {
   useEffect(() => {
     bottom.current?.scrollIntoView({block: 'end'});
   }, [conversation.messages.length, pending]);
+
+  useEffect(() => onSpeakingChange(setSpeaking), []);
+
+  useEffect(() => {
+    const update = () => setVisible(document.visibilityState === 'visible');
+    document.addEventListener('visibilitychange', update);
+    return () => document.removeEventListener('visibilitychange', update);
+  }, []);
+
+  // The latest draft and send, for the hands-free listener's callbacks.
+  const draftRef = useRef(draft);
+  draftRef.current = draft;
+  const sendRef = useRef<(text: string, spoken?: boolean) => void>(() => {});
+
+  useEffect(() => {
+    if (!handsFreeListening) return;
+    const listener = listenContinuously({
+      sendWord: settings.sendWord,
+      initialText: draftRef.current,
+      onText: setDraft,
+      onSend: text => sendRef.current(text, true),
+      onError: message => {
+        setHandsFreePaused(true);
+        setError(message);
+      },
+    });
+    return () => listener.stop();
+  }, [handsFreeListening, settings.sendWord]);
 
   const stopAll = () => {
     abort.current?.abort();
@@ -156,7 +190,17 @@ export default function App() {
     }
   };
 
+  sendRef.current = send;
+
   const toggleMic = () => {
+    if (handsFree) {
+      if (handsFreePaused) {
+        stopSpeaking();
+        setError('');
+      }
+      setHandsFreePaused(p => !p);
+      return;
+    }
     if (listening) {
       listening.stop();
       return;
@@ -240,18 +284,22 @@ export default function App() {
         <form className="composer" onSubmit={e => { e.preventDefault(); send(draft); }}>
           {listenSupported && (
             <IconButton
-              icon={listening ? MicOff : Mic}
-              label={listening ? 'Stop listening' : 'Speak your message'}
-              className={listening ? 'mic on' : 'mic'}
-              aria-pressed={!!listening}
-              disabled={busy}
+              icon={handsFree ? (handsFreePaused ? MicOff : Mic) : listening ? MicOff : Mic}
+              label={handsFree
+                ? handsFreePaused ? 'Resume hands-free listening' : 'Pause hands-free listening'
+                : listening ? 'Stop listening' : 'Speak your message'}
+              className={(handsFree ? handsFreeListening : listening) ? 'mic on' : 'mic'}
+              aria-pressed={handsFree ? !handsFreePaused : !!listening}
+              disabled={busy && !handsFree}
               onClick={toggleMic}
             />
           )}
           <textarea
             value={draft}
             rows={2}
-            placeholder={listening ? 'Listening…' : 'Message guru'}
+            placeholder={handsFreeListening
+              ? `Listening… end with “${settings.sendWord}” to send`
+              : listening ? 'Listening…' : 'Message guru'}
             aria-label="Message"
             onChange={e => setDraft(e.target.value)}
             onKeyDown={e => {

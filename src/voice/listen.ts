@@ -83,3 +83,88 @@ export function listen({onText, onDone, onError}: {
     },
   };
 }
+
+export interface ContinuousListening {
+  stop(): void;
+}
+
+const escape = (s: string) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+/**
+ * Hands-free listening: the transcript accumulates (starting from `initialText`), and when a
+ * finished phrase ends with `sendWord` (e.g. "… over"), the text before it is sent.
+ * Browsers end recognition sessions after a while, so it restarts until `stop()`.
+ */
+export function listenContinuously({sendWord, initialText = '', onText, onSend, onError}: {
+  sendWord: string;
+  initialText?: string;
+  onText: (text: string) => void;
+  onSend: (text: string) => void;
+  onError: (message: string) => void;
+}): ContinuousListening {
+  if (!Recognition) throw new Error('Speech recognition is not supported in this browser.');
+  const ending = new RegExp(`(?:^|[\\s,.;:!?])${escape(sendWord.trim())}[\\s.,;:!?…]*$`, 'i');
+
+  let pending = initialText.trim(); // finished phrases not yet sent
+  let stopped = false;
+  let current: Recognition | null = null;
+  let quickEnds = 0;
+
+  const join = (a: string, b: string) => [a, b.trim()].filter(Boolean).join(' ');
+
+  const start = () => {
+    if (stopped) return;
+    const recognition = new Recognition();
+    recognition.lang = navigator.language;
+    recognition.interimResults = true;
+    recognition.continuous = true;
+    const startedAt = Date.now();
+
+    recognition.onresult = event => {
+      let interim = '';
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        const result = event.results[i];
+        if (!result.isFinal) {
+          interim += result[0].transcript;
+          continue;
+        }
+        pending = join(pending, result[0].transcript);
+        const match = ending.exec(pending);
+        if (match) {
+          const message = pending.slice(0, match.index).trim();
+          pending = '';
+          onText('');
+          if (message) onSend(message);
+        }
+      }
+      onText(join(pending, interim));
+    };
+    recognition.onerror = event => {
+      if (event.error === 'no-speech' || event.error === 'aborted') return;
+      stopped = true;
+      onError(MESSAGES[event.error] ?? `Speech recognition failed (${event.error}).`);
+    };
+    recognition.onend = () => {
+      current = null;
+      if (stopped) return;
+      // Restart; back off if sessions keep ending immediately (e.g. the device is busy).
+      quickEnds = Date.now() - startedAt < 1000 ? quickEnds + 1 : 0;
+      if (quickEnds >= 5) {
+        stopped = true;
+        onError('The microphone keeps stopping. Hands-free listening was paused.');
+        return;
+      }
+      setTimeout(start, quickEnds ? 500 * quickEnds : 0);
+    };
+    current = recognition;
+    recognition.start();
+  };
+
+  start();
+  return {
+    stop() {
+      stopped = true;
+      current?.abort();
+    },
+  };
+}

@@ -15,6 +15,9 @@ export interface Settings {
   plugins: Record<string, boolean>;
   /** Read every reply aloud (replies to spoken messages are always read aloud). */
   speakReplies: boolean;
+  /** Keep the mic on while the page is visible; send when a phrase ends with `sendWord`. */
+  handsFree: boolean;
+  sendWord: string;
 }
 
 /** Credentials for a provider, or undefined when none have been entered yet. */
@@ -33,6 +36,8 @@ const DEFAULTS: Settings = {
   models: {...DEFAULT_MODELS},
   plugins: Object.fromEntries(BUILTIN_MCP_SERVERS.map(s => [s.id, true])),
   speakReplies: false,
+  handsFree: false,
+  sendWord: 'over',
 };
 
 function load(): Settings {
@@ -46,6 +51,8 @@ function load(): Settings {
       models: {...DEFAULTS.models, ...saved.models},
       plugins: {...DEFAULTS.plugins, ...saved.plugins},
       speakReplies: saved.speakReplies ?? DEFAULTS.speakReplies,
+      handsFree: saved.handsFree ?? DEFAULTS.handsFree,
+      sendWord: saved.sendWord?.trim() || DEFAULTS.sendWord,
     };
   } catch {
     return DEFAULTS;

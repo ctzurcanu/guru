@@ -248,3 +248,4 @@ button.icon.subtle { min-height: 0; margin-top: 0.4rem; padding: 0.2rem 0.5rem; 
 }
 
 @media (prefers-reduced-motion: reduce) { .spin { animation: none; } }
+.field.indent { margin-left: 1.6rem; }
